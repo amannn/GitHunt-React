@@ -1,5 +1,6 @@
 import Express from 'express';
 import path from 'path';
+import fs from 'fs';
 import proxy from 'http-proxy-middleware';
 
 import React from 'react';
@@ -22,6 +23,26 @@ import {
 } from './links';
 import Html from './routes/Html';
 import Layout from './routes/Layout';
+
+const stats = [];
+
+const processMemory = (req, res, next) => {
+  global.gc();
+
+  const heapUsed = process.memoryUsage().heapUsed;
+  console.log('Used heap ' + heapUsed + ' bytes');
+  stats.push(heapUsed);
+
+  next();
+};
+
+process.on('SIGINT', () => {
+  fs.writeFile('stats.json', JSON.stringify(stats), err => {
+    if (err) throw err;
+    console.log('\nSaved stats.json');
+    process.exit();
+  });
+});
 
 let PORT = 3000;
 if (process.env.PORT) {
@@ -62,7 +83,8 @@ const links = [
 if (process.env.NODE_ENV === 'production') {
   links.unshift(createPersistedQueryLink());
 }
-app.use((req, res) => {
+
+app.use(processMemory, (req, res) => {
   const client = new ApolloClient({
     ssrMode: true,
     link: ApolloLink.from(links),
